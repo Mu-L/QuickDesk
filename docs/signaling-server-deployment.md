@@ -33,6 +33,9 @@ Configuration reference:
 | `REDIS_PASSWORD` | (empty) | Redis password |
 | `ADMIN_USER` | admin | Initial admin username (first deploy only) |
 | `ADMIN_PASSWORD` | admin | Initial admin password (first deploy only) |
+| `RUN_AUTO_MIGRATE` | false | Run GORM AutoMigrate at startup (temporarily enable for first initialization/schema upgrades; keep false for stable production runs) |
+
+> **Database initialization/upgrades:** `RUN_AUTO_MIGRATE` defaults to `false` to avoid scanning database metadata on every startup. For a fresh database, or when a release adds tables/columns, set `RUN_AUTO_MIGRATE=true` temporarily and start the server once. After it starts successfully, set it back to `false` and restart.
 
 **Optional (can be configured in admin panel after deployment):**
 
@@ -200,12 +203,17 @@ docker compose ps
 # View logs
 docker compose logs -f
 
+# View recent logs (recommended to avoid following high-volume logs)
+docker compose logs --tail 200
+
 # Stop services
 docker compose down
 
 # Restart services
 docker compose restart
 ```
+
+The generated `docker-compose.yml` configures Docker `json-file` log rotation for the all-in-one container (50MB per file, 3 files retained). This prevents high-volume server logs from growing indefinitely and causing disk/IO pressure. Adjust `logging.options.max-size` / `max-file` if needed, then run `docker compose up -d`.
 
 ---
 
@@ -308,8 +316,7 @@ npm --version
 
 ## 5. Build the Signaling Server
 
-> **Note:** Database tables are automatically created/updated by GORM AutoMigrate when the signaling server starts. No manual SQL execution is required.
-> Reference SQL can be found in `SignalingServer/migrations/001_init.sql`.
+> **Note:** Reference SQL can be found in `SignalingServer/migrations/001_init.sql`. GORM AutoMigrate is disabled by default; for first initialization or schema upgrades, temporarily set `RUN_AUTO_MIGRATE=true` in `.env` and start the server once. Set it back to `false` afterwards to avoid scanning `information_schema` on every production startup.
 
 ```bash
 # Clone the code to your server

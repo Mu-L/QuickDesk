@@ -51,7 +51,6 @@ func (w *PresenceWatcher) Start(ctx context.Context) {
 		return
 	}
 	go w.runForever(ctx)
-	go w.runOfflineScanner(ctx)
 }
 
 const (

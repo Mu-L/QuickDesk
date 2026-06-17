@@ -50,6 +50,11 @@ type Config struct {
 	Admin    AdminConfig
 	Security SecurityConfig
 	Sms      SmsConfig
+	Runtime  RuntimeConfig
+}
+
+type RuntimeConfig struct {
+	RunAutoMigrate bool
 }
 
 type ServerConfig struct {
@@ -117,6 +122,8 @@ func Load() *Config {
 	viper.SetDefault("ALIYUN_SMS_SIGN_NAME", "")
 	viper.SetDefault("ALIYUN_SMS_TEMPLATE_CODE", "")
 
+	viper.SetDefault("RUN_AUTO_MIGRATE", false)
+
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			log.Println("Config file not found, using defaults and environment variables")
@@ -174,16 +181,19 @@ func Load() *Config {
 		TemplateCode:    smsTemplate,
 		Enabled:         smsEnabled,
 	}
+	cfg.Runtime = RuntimeConfig{
+		RunAutoMigrate: viper.GetBool("RUN_AUTO_MIGRATE"),
+	}
 
 	apiKeyStatus := "disabled"
 	if cfg.Security.APIKey != "" {
 		apiKeyStatus = "enabled"
 	}
-	log.Printf("Loaded config: Server=%s:%d, DB=%s:%d/%s, ICE TURN=%d STUN=%d TTL=%ds MaxRate=%dkbps, APIKey=%s, AllowedOrigins=%d, SMS=%v",
+	log.Printf("Loaded config: Server=%s:%d, DB=%s:%d/%s, ICE TURN=%d STUN=%d TTL=%ds MaxRate=%dkbps, APIKey=%s, AllowedOrigins=%d, SMS=%v, AutoMigrate=%v",
 		cfg.Server.Host, cfg.Server.Port,
 		cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName,
 		len(cfg.Ice.TurnURLs), len(cfg.Ice.StunURLs), cfg.Ice.CredentialTTL, cfg.Ice.MaxRateKbps,
-		apiKeyStatus, len(cfg.Security.AllowedOrigins), cfg.Sms.Enabled)
+		apiKeyStatus, len(cfg.Security.AllowedOrigins), cfg.Sms.Enabled, cfg.Runtime.RunAutoMigrate)
 
 	return cfg
 }

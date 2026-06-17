@@ -201,8 +201,8 @@ type authFrame struct {
 const (
 	firstFrameTimeout = 5 * time.Second
 	wsWriteTimeout    = 10 * time.Second
-	wsPingInterval    = 5 * time.Second
-	wsReadTimeout     = 15 * time.Second
+	wsPingInterval    = 30 * time.Second
+	wsReadTimeout     = 90 * time.Second
 )
 
 // HandleEvents serves GET /v1/realtime/events.
@@ -252,6 +252,7 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 	// conn with the bus fanout. Bus Publish can't find us yet, so it
 	// can't race us into writing a mid-stream event before snapshot.
 	rev := h.nextRev()
+	conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 	if err := conn.WriteJSON(eventWire{Type: "auth_ok", ServerRev: rev}); err != nil {
 		return
 	}
@@ -264,6 +265,7 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 	if af.SinceRev > 0 {
 		if r, err := h.bus.EventsSinceRev(c.Request.Context(), uid, af.SinceRev); err == nil && !r.Truncated {
 			for _, e := range r.Events {
+				conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 				_ = conn.WriteJSON(eventWire{
 					ID:        e.ID,
 					Type:      e.Type,
@@ -278,12 +280,14 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 			// checkpoint or the lookup failed; both mean "we cannot
 			// guarantee a clean replay" → fall through to the full
 			// snapshot path with an explicit hint frame.
+			conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			_ = conn.WriteJSON(eventWire{Type: "snapshot_required", ServerRev: rev})
 		}
 	}
 	if !resumed {
 		snap, err := h.buildSnapshot(c.Request.Context(), uid)
 		if err == nil {
+			conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			_ = conn.WriteJSON(eventWire{Type: "snapshot", ServerRev: rev, Data: snap})
 		}
 	}
@@ -636,37 +640,18 @@ func (h *RealtimeHandler) registerSignalConn(sc *signalConn) error {
 }
 
 func (h *RealtimeHandler) unregisterSignalConn(sc *signalConn) {
+	var clientsToClose []*signalConn
+	shouldPublishOffline := false
 	h.signalMu.Lock()
 	switch sc.role {
 	case service.SignalRoleHost:
 		if cur := h.signalHosts[sc.deviceID]; cur == sc {
 			delete(h.signalHosts, sc.deviceID)
 			h.metrics.MarkSignalDisconnected(sc.role, sc.deviceID, sc.clientID)
-			// Mark presence down for this instance.
-			_ = h.presence.MarkWSDisconnected(context.Background(), sc.deviceID)
-			// Notify any clients still connected to this host.
 			for _, cc := range h.signalClient[sc.deviceID] {
-				cc.send(mustMarshal(map[string]interface{}{
-					"type": "error",
-					"code": "PEER_DISCONNECTED",
-				}))
-				go cc.close()
+				clientsToClose = append(clientsToClose, cc)
 			}
-			// Publish online-changed once if we were the last live signal.
-			if online := h.presence.IsOnline(context.Background(), sc.deviceID); !online && h.presence.ForgetOnlineCandidate(context.Background(), sc.deviceID) {
-				if d, err := h.devices.GetByDeviceID(context.Background(), sc.deviceID); err == nil && d.UserID != nil {
-					h.bus.Publish(context.Background(), service.Event{
-						Type:     service.EventDeviceOnlineChanged,
-						UserID:   *d.UserID,
-						DeviceID: sc.deviceID,
-						Data: map[string]interface{}{
-							"device_id": sc.deviceID,
-							"online":    false,
-							"logged_in": false,
-						},
-					})
-				}
-			}
+			shouldPublishOffline = true
 		}
 	case service.SignalRoleClient:
 		if m := h.signalClient[sc.deviceID]; m != nil {
@@ -680,6 +665,31 @@ func (h *RealtimeHandler) unregisterSignalConn(sc *signalConn) {
 		}
 	}
 	h.signalMu.Unlock()
+
+	if sc.role == service.SignalRoleHost && shouldPublishOffline {
+		_ = h.presence.MarkWSDisconnected(context.Background(), sc.deviceID)
+		for _, cc := range clientsToClose {
+			cc.send(mustMarshal(map[string]interface{}{
+				"type": "error",
+				"code": "PEER_DISCONNECTED",
+			}))
+			go cc.close()
+		}
+		if online := h.presence.IsOnline(context.Background(), sc.deviceID); !online && h.presence.ForgetOnlineCandidate(context.Background(), sc.deviceID) {
+			if d, err := h.devices.GetByDeviceID(context.Background(), sc.deviceID); err == nil && d.UserID != nil {
+				h.bus.Publish(context.Background(), service.Event{
+					Type:     service.EventDeviceOnlineChanged,
+					UserID:   *d.UserID,
+					DeviceID: sc.deviceID,
+					Data: map[string]interface{}{
+						"device_id": sc.deviceID,
+						"online":    false,
+						"logged_in": false,
+					},
+				})
+			}
+		}
+	}
 	sc.close()
 }
 

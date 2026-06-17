@@ -31,6 +31,8 @@ type DeviceService struct {
 	secrets *DeviceSecretService
 }
 
+const heartbeatDBUpdateInterval = 5 * time.Minute
+
 func NewDeviceService(repo *repository.DeviceRepository, secrets *DeviceSecretService) *DeviceService {
 	return &DeviceService{repo: repo, secrets: secrets}
 }
@@ -151,16 +153,12 @@ func (s *DeviceService) RotateSecret(ctx context.Context, deviceID string) (stri
 	return plaintext, nil
 }
 
-// Heartbeat updates DB last_seen_at + app_version/os (when provided).
-// Presence key refresh is the caller's responsibility (PresenceService).
+// Heartbeat refreshes coarse DB bookkeeping at a low frequency. Presence key
+// refresh is the caller's responsibility (PresenceService), and is the
+// authoritative online signal. Keeping DB writes off the hot path avoids a
+// write storm when many hosts heartbeat every few seconds.
 func (s *DeviceService) Heartbeat(ctx context.Context, deviceID, os, osVersion, appVersion string) error {
-	if err := s.repo.UpdateLastSeen(ctx, deviceID); err != nil {
-		return err
-	}
-	if os != "" || osVersion != "" || appVersion != "" {
-		_ = s.repo.UpdateDeviceInfo(ctx, deviceID, os, osVersion, appVersion)
-	}
-	return nil
+	return s.repo.UpdateHeartbeatIfStale(ctx, deviceID, os, osVersion, appVersion, time.Now().UTC().Add(-heartbeatDBUpdateInterval))
 }
 
 // SetAccessCode writes the plaintext access_code into DB. Called from

@@ -91,6 +91,26 @@ func (r *DeviceRepository) UpdateDeviceInfo(ctx context.Context, deviceID, os, o
 		Updates(updates).Error
 }
 
+func (r *DeviceRepository) UpdateHeartbeatIfStale(ctx context.Context, deviceID, os, osVersion, appVersion string, staleBefore time.Time) error {
+	now := time.Now().UTC()
+	updates := map[string]interface{}{
+		"last_seen_at": now,
+	}
+	if os != "" {
+		updates["os"] = os
+	}
+	if osVersion != "" {
+		updates["os_version"] = osVersion
+	}
+	if appVersion != "" {
+		updates["app_version"] = appVersion
+	}
+	query := r.db.WithContext(ctx).Model(&models.Device{}).Where("device_id = ?", deviceID).
+		Where("last_seen_at IS NULL OR last_seen_at < ? OR (? <> '' AND os IS DISTINCT FROM ?) OR (? <> '' AND os_version IS DISTINCT FROM ?) OR (? <> '' AND app_version IS DISTINCT FROM ?)",
+			staleBefore, os, os, osVersion, osVersion, appVersion, appVersion)
+	return query.Updates(updates).Error
+}
+
 func (r *DeviceRepository) SetLoggedIn(ctx context.Context, deviceID string, intent bool) error {
 	return r.db.WithContext(ctx).Model(&models.Device{}).
 		Where("device_id = ?", deviceID).

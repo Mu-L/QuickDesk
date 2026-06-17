@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -58,8 +57,8 @@ func (p *PresenceService) wsKey(deviceID, instance string) string {
 	return fmt.Sprintf("qd:presence:device:%s:ws:%s", deviceID, instance)
 }
 
-func (p *PresenceService) wsPattern(deviceID string) string {
-	return fmt.Sprintf("qd:presence:device:%s:ws:*", deviceID)
+func (p *PresenceService) wsInstancesKey(deviceID string) string {
+	return fmt.Sprintf("qd:presence:device:%s:ws_instances", deviceID)
 }
 
 func (p *PresenceService) instanceKey(instance string) string {
@@ -103,13 +102,22 @@ func (p *PresenceService) MarkWSConnected(ctx context.Context, deviceID string) 
 	if err := p.markInstanceAlive(ctx); err != nil {
 		return err
 	}
-	return p.rdb.Set(ctx, p.wsKey(deviceID, p.instanceID), "1", presenceWSTTL).Err()
+	pipe := p.rdb.Pipeline()
+	pipe.Set(ctx, p.wsKey(deviceID, p.instanceID), "1", presenceWSTTL)
+	pipe.SAdd(ctx, p.wsInstancesKey(deviceID), p.instanceID)
+	pipe.Expire(ctx, p.wsInstancesKey(deviceID), presenceWSTTL)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // MarkWSDisconnected deletes this instance's WS presence key for deviceID.
 // It's safe to call even when the key doesn't exist.
 func (p *PresenceService) MarkWSDisconnected(ctx context.Context, deviceID string) error {
-	return p.rdb.Del(ctx, p.wsKey(deviceID, p.instanceID)).Err()
+	pipe := p.rdb.Pipeline()
+	pipe.Del(ctx, p.wsKey(deviceID, p.instanceID))
+	pipe.SRem(ctx, p.wsInstancesKey(deviceID), p.instanceID)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // RememberOnlineCandidate records that deviceID has been observed online or
@@ -150,48 +158,46 @@ func (p *PresenceService) State(ctx context.Context, deviceID string) PresenceSt
 }
 
 func (p *PresenceService) liveWSCount(ctx context.Context, deviceID string) int {
-	var keys []string
-	iter := p.rdb.Scan(ctx, 0, p.wsPattern(deviceID), 10).Iterator()
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
+	instances, err := p.rdb.SMembers(ctx, p.wsInstancesKey(deviceID)).Result()
+	if err != nil {
+		log.Printf("[Presence] smembers ws instances failed for %s: %v", deviceID, err)
+		return 0
 	}
-	if err := iter.Err(); err != nil {
-		log.Printf("[Presence] scan error for %s: %v", deviceID, err)
-	}
-	if len(keys) == 0 {
+	if len(instances) == 0 {
 		return 0
 	}
 
 	pipe := p.rdb.Pipeline()
-	cmds := make([]*redis.IntCmd, 0, len(keys))
-	for _, key := range keys {
-		instance := wsInstanceFromKey(key)
+	type instanceCheck struct {
+		id  string
+		cmd *redis.IntCmd
+	}
+	checks := make([]instanceCheck, 0, len(instances))
+	for _, instance := range instances {
 		if instance == "" {
 			continue
 		}
-		cmds = append(cmds, pipe.Exists(ctx, p.instanceKey(instance)))
+		checks = append(checks, instanceCheck{id: instance, cmd: pipe.Exists(ctx, p.instanceKey(instance))})
 	}
-	if len(cmds) == 0 {
+	if len(checks) == 0 {
 		return 0
 	}
 	if _, err := pipe.Exec(ctx); err != nil {
 		log.Printf("[Presence] instance exists pipeline failed: %v", err)
 	}
 	count := 0
-	for _, cmd := range cmds {
-		if cmd.Val() > 0 {
+	staleInstances := make([]interface{}, 0)
+	for _, check := range checks {
+		if check.cmd.Val() > 0 {
 			count++
+		} else {
+			staleInstances = append(staleInstances, check.id)
 		}
 	}
-	return count
-}
-
-func wsInstanceFromKey(key string) string {
-	idx := strings.LastIndex(key, ":ws:")
-	if idx < 0 {
-		return ""
+	if len(staleInstances) > 0 {
+		_ = p.rdb.SRem(ctx, p.wsInstancesKey(deviceID), staleInstances...).Err()
 	}
-	return key[idx+len(":ws:"):]
+	return count
 }
 
 // IsOnline is a convenience for State(...).Online.
@@ -207,9 +213,8 @@ func (p *PresenceService) BulkOnline(ctx context.Context, deviceIDs []string) ma
 	if len(deviceIDs) == 0 {
 		return out
 	}
-	// Pipeline the hb existence checks; WS presence has to fall back to
-	// SCAN per device (no MATCH-wildcard batch in Redis). For typical
-	// per-user device counts (≤100) this is acceptable.
+	// Pipeline the hb existence checks. WS liveness uses the per-device
+	// instance set maintained by MarkWSConnected/MarkWSDisconnected.
 	pipe := p.rdb.Pipeline()
 	cmds := make(map[string]*redis.IntCmd, len(deviceIDs))
 	for _, id := range deviceIDs {

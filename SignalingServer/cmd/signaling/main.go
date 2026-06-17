@@ -39,22 +39,26 @@ func main() {
 	db := database.InitPostgreSQL(cfg)
 	redisClient := database.InitRedis(cfg)
 
-	log.Println("Running AutoMigrate (schema source of truth is migrations/001_init.sql)...")
-	if err := db.AutoMigrate(
-		&models.User{},
-		&models.Device{},
-		&models.UserDevice{},
-		&models.ConnectionHistory{},
-		&models.UserFavorite{},
-		&models.AdminUser{},
-		&models.AuditLog{},
-		&models.Settings{},
-		&models.DeviceGroup{},
-		&models.DeviceGroupMember{},
-		&models.Webhook{},
-		&models.Preset{},
-	); err != nil {
-		log.Printf("Warning: AutoMigrate error (continuing anyway): %v", err)
+	if cfg.Runtime.RunAutoMigrate {
+		log.Println("Running AutoMigrate (schema source of truth is migrations/001_init.sql)...")
+		if err := db.AutoMigrate(
+			&models.User{},
+			&models.Device{},
+			&models.UserDevice{},
+			&models.ConnectionHistory{},
+			&models.UserFavorite{},
+			&models.AdminUser{},
+			&models.AuditLog{},
+			&models.Settings{},
+			&models.DeviceGroup{},
+			&models.DeviceGroupMember{},
+			&models.Webhook{},
+			&models.Preset{},
+		); err != nil {
+			log.Printf("Warning: AutoMigrate error (continuing anyway): %v", err)
+		}
+	} else {
+		log.Println("AutoMigrate disabled (set RUN_AUTO_MIGRATE=true to enable).")
 	}
 
 	// -------------------------------------------------------------------

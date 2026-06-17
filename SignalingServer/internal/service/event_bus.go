@@ -66,16 +66,39 @@ type EventSubscriber interface {
 // events) appends them to the per-user Redis stream used by realtime WS
 // `resume` 鈥?see 搂2.8.
 type EventBus struct {
-	rdb    *redis.Client
-	mu     sync.RWMutex
-	subs   []EventSubscriber
-	stream time.Duration // stream retention (TTL hint; actual MAXLEN handles size)
+	rdb       *redis.Client
+	mu        sync.RWMutex
+	subs      []EventSubscriber
+	stream    time.Duration // stream retention (TTL hint; actual MAXLEN handles size)
+	workQueue chan subscriberWork
+}
+
+type subscriberWork struct {
+	sub EventSubscriber
+	evt Event
 }
 
 // NewEventBus wires a bus to Redis. The stream TTL is a rough hint; retention
 // is primarily capped by XADD MAXLEN.
 func NewEventBus(rdb *redis.Client) *EventBus {
-	return &EventBus{rdb: rdb, stream: 5 * time.Minute}
+	b := &EventBus{rdb: rdb, stream: 5 * time.Minute, workQueue: make(chan subscriberWork, 1024)}
+	for i := 0; i < 4; i++ {
+		go b.subscriberWorker()
+	}
+	return b
+}
+
+func (b *EventBus) subscriberWorker() {
+	for work := range b.workQueue {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[EventBus] subscriber %s panicked on %s: %v", work.sub.Name(), work.evt.Type, r)
+				}
+			}()
+			work.sub.HandleEvent(context.Background(), work.evt)
+		}()
+	}
 }
 
 // Subscribe adds an in-process subscriber. Order of registration determines
@@ -139,22 +162,17 @@ func (b *EventBus) Publish(ctx context.Context, evt Event) {
 		}
 	}
 
-	// Fan out to in-process subscribers. Each subscriber runs in its own
-	// goroutine with panic recovery so one flaky handler can't stop
-	// anyone else.
+	// Fan out to in-process subscribers through a bounded worker queue.
+	// This prevents high-frequency events from spawning unbounded goroutines.
 	b.mu.RLock()
 	subs := append([]EventSubscriber(nil), b.subs...)
 	b.mu.RUnlock()
 	for _, s := range subs {
-		s := s
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("[EventBus] subscriber %s panicked on %s: %v", s.Name(), evt.Type, r)
-				}
-			}()
-			s.HandleEvent(ctx, evt)
-		}()
+		select {
+		case b.workQueue <- subscriberWork{sub: s, evt: evt}:
+		default:
+			log.Printf("[EventBus] subscriber queue full; dropping %s for %s", evt.Type, s.Name())
+		}
 	}
 
 	// §2.17 outbox retry list: if the authoritative stream write failed,
@@ -264,9 +282,12 @@ func (b *EventBus) EventsSinceRev(ctx context.Context, userID uint, sinceRev int
 		return ResumeResult{}, nil
 	}
 	key := fmt.Sprintf("qd:events:user:%d", userID)
-	res, err := b.rdb.XRange(ctx, key, "-", "+").Result()
+	res, err := b.rdb.XRevRangeN(ctx, key, "+", "-", 1000).Result()
 	if err != nil {
 		return ResumeResult{}, err
+	}
+	for left, right := 0, len(res)-1; left < right; left, right = left+1, right-1 {
+		res[left], res[right] = res[right], res[left]
 	}
 
 	out := make([]Event, 0, len(res))
