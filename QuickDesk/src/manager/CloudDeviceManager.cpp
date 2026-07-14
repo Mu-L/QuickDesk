@@ -899,12 +899,8 @@ void CloudDeviceManager::handleEventFrame(const QJsonObject& msg)
     } else if (type.startsWith("favorite.")) {
         applyFavoriteEvent(type, data);
     } else if (type == "session.revoked") {
-        LOG_WARN("[CloudDeviceManager] session.revoked received — forcing logout");
-        // AuthManager clears local session + emits loggedOut → QML pops
-        // to login page. We ask logout() with empty device_id so it goes
-        // through the two-step flow (best-effort session clear is fine
-        // even though the server has already nuked it).
-        m_authManager->logout(QString());
+        LOG_WARN("[CloudDeviceManager] session.revoked received — clearing user session without changing device session intent");
+        m_authManager->handleServerSessionRevoked();
     } else {
         LOG_DEBUG("[CloudDeviceManager] unhandled event type: {}",
                   type.toStdString());

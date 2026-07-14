@@ -137,6 +137,17 @@ class UserApi {
       error_msg: errorMsg || '',
     });
   }
+
+  // -------- access-code verification (§2.6 / §2.18) --------
+
+  async verifyAccessCode(deviceId, code) {
+    return this._request(
+      'POST',
+      `/v1/devices/${encodeURIComponent(deviceId)}/access-code:verify`,
+      { code },
+      { noRefresh: true },
+    );
+  }
 }
 
 export const userApi = new UserApi();

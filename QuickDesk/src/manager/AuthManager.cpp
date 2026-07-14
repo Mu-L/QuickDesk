@@ -332,11 +332,15 @@ void AuthManager::refreshAccessToken(std::function<void(bool)> done)
                     LOG_INFO("[AuthManager] Access token refreshed");
                     ok = true;
                 } else {
-                    // REFRESH_INVALID or expired → hard logout.
                     auto [code, msg] = parseProblem(data, errorMsg);
-                    LOG_WARN("[AuthManager] Refresh failed: code={} msg={}",
-                             code.toStdString(), msg.toStdString());
-                    clearSession();
+                    if (statusCode == 401) {
+                        LOG_WARN("[AuthManager] Refresh rejected: code={} msg={}; clearing session",
+                                 code.toStdString(), msg.toStdString());
+                        clearSession();
+                    } else {
+                        LOG_WARN("[AuthManager] Refresh unavailable: status={} code={} msg={}; preserving session",
+                                 statusCode, code.toStdString(), msg.toStdString());
+                    }
                 }
 
                 auto q = std::move(m_refreshQueue);
@@ -347,6 +351,12 @@ void AuthManager::refreshAccessToken(std::function<void(bool)> done)
                 }
             });
         });
+}
+
+void AuthManager::handleServerSessionRevoked()
+{
+    LOG_WARN("[AuthManager] Server revoked current user session; preserving device session intent");
+    clearSession();
 }
 
 // -----------------------------------------------------------------------
