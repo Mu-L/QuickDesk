@@ -11,18 +11,24 @@
 
 const ACCESS_TOKEN_KEY  = 'quickdesk_user_access_token'
 const REFRESH_TOKEN_KEY = 'quickdesk_user_refresh_token'
+const ACCESS_EXPIRES_KEY  = 'quickdesk_user_access_expires_at'
+const REFRESH_EXPIRES_KEY = 'quickdesk_user_refresh_expires_at'
 const USER_INFO_KEY     = 'quickdesk_user_info'
 const SERVER_URL_KEY    = 'quickdesk_signaling_url'
 export const DEFAULT_SERVER = 'ws://qdsignaling.quickcoder.cc:8060'
 
 // Legacy key cleaned up on load so old sessions are not retained.
 const LEGACY_TOKEN_KEY = 'quickdesk_user_token'
+const PROACTIVE_REFRESH_MARGIN_MS = 5 * 60 * 1000
+const PROACTIVE_REFRESH_RETRY_MS = 60 * 1000
+const FALLBACK_REFRESH_INTERVAL_MS = 90 * 60 * 1000
 
 class UserApi {
   constructor() {
     this._baseUrl = ''
     this._refreshInFlight = null   // Promise<bool> — collapses concurrent refresh
     this._onSessionEndedHandler = null
+    this._refreshTimer = null
     if (localStorage.getItem(LEGACY_TOKEN_KEY)) {
       localStorage.removeItem(LEGACY_TOKEN_KEY)
     }
@@ -61,18 +67,54 @@ class UserApi {
     if (!payload) return
     if (payload.access_token)  localStorage.setItem(ACCESS_TOKEN_KEY, payload.access_token)
     if (payload.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, payload.refresh_token)
+    if (payload.access_expires_at) localStorage.setItem(ACCESS_EXPIRES_KEY, payload.access_expires_at)
+    if (payload.refresh_expires_at) localStorage.setItem(REFRESH_EXPIRES_KEY, payload.refresh_expires_at)
     if (payload.user) {
       const u = payload.user
       localStorage.setItem(USER_INFO_KEY, JSON.stringify({
         id: u.id, username: u.username, phone: u.phone, email: u.email,
       }))
     }
+    this.scheduleProactiveRefresh()
+  }
+
+  adoptSession(payload) {
+    this._saveSession(payload)
   }
 
   clearSession() {
+    this.stopProactiveRefresh()
     localStorage.removeItem(ACCESS_TOKEN_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    localStorage.removeItem(ACCESS_EXPIRES_KEY)
+    localStorage.removeItem(REFRESH_EXPIRES_KEY)
     localStorage.removeItem(USER_INFO_KEY)
+  }
+
+  scheduleProactiveRefresh() {
+    this.stopProactiveRefresh()
+    if (!this.getToken() || !this.getRefreshToken()) return
+
+    const expRaw = localStorage.getItem(ACCESS_EXPIRES_KEY)
+    const expMs = expRaw ? Date.parse(expRaw) : NaN
+    let delay = Number.isFinite(expMs)
+      ? expMs - Date.now() - PROACTIVE_REFRESH_MARGIN_MS
+      : FALLBACK_REFRESH_INTERVAL_MS
+    if (delay < 0) delay = 0
+
+    this._refreshTimer = setTimeout(async () => {
+      const ok = await this._refreshSingleFlight()
+      if (ok) {
+        this.scheduleProactiveRefresh()
+      } else if (this.getToken() && this.getRefreshToken()) {
+        this._refreshTimer = setTimeout(() => this.scheduleProactiveRefresh(), PROACTIVE_REFRESH_RETRY_MS)
+      }
+    }, delay)
+  }
+
+  stopProactiveRefresh() {
+    if (this._refreshTimer) clearTimeout(this._refreshTimer)
+    this._refreshTimer = null
   }
 
   /**

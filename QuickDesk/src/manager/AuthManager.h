@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 #include <QDateTime>
+#include <QTimer>
 #include <functional>
 
 namespace quickdesk {
@@ -120,6 +121,8 @@ private:
     // clears the session; transport and server errors preserve it so a
     // transient outage cannot log the user out.
     void refreshAccessToken(std::function<void(bool)> done);
+    void scheduleAccessTokenRefresh();
+    void stopAccessTokenRefreshTimer();
 
     // Clear local session + emit loggedOut. Safe to call multiple times.
     void clearSession();
@@ -152,6 +155,7 @@ private:
     QString m_refreshToken;
     QDateTime m_accessExpiresAt;
     QDateTime m_refreshExpiresAt;
+    QTimer m_accessRefreshTimer;
 
     // Prevent concurrent refresh storms: queue callbacks while a refresh
     // is in flight.

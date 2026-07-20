@@ -143,7 +143,11 @@ func (h *HostHandler) Heartbeat(c *gin.Context) {
 		return
 	}
 	state := h.presence.State(c.Request.Context(), deviceID)
-	if state.Online && h.presence.RememberOnlineCandidate(c.Request.Context(), deviceID) {
+	rememberedNow := false
+	if state.Online {
+		rememberedNow = h.presence.RememberOnlineCandidate(c.Request.Context(), deviceID)
+	}
+	if state.Online && rememberedNow {
 		log.Printf("[presence] device online via heartbeat device=%s presence={%s}", deviceID, state.String())
 		if d, err := h.devices.GetByDeviceID(c.Request.Context(), deviceID); err == nil && d.UserID != nil {
 			h.bus.Publish(c.Request.Context(), service.Event{
@@ -157,6 +161,9 @@ func (h *HostHandler) Heartbeat(c *gin.Context) {
 				},
 			})
 		}
+	} else if state.Online {
+		log.Printf("[presence] heartbeat online_event_skipped device=%s presence={%s} remembered_now=%t",
+			deviceID, state.String(), rememberedNow)
 	}
 
 	c.JSON(http.StatusOK, heartbeatResp{

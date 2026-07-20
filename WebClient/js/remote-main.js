@@ -83,6 +83,8 @@ class RemoteDesktopApp {
         const params = new URLSearchParams(window.location.search);
         const serverUrl = params.get('server') || 'ws://localhost:8000';
         const deviceId = params.get('device');
+        userApi.setBaseUrl(serverUrl);
+        userApi.scheduleProactiveRefresh();
         // §2.18: URL carries a one-shot signal_token (key "st"), NOT the
         // plaintext access_code. The access_code is handed off via
         // sessionStorage (see src/utils/remoteLauncher.js) — same-origin,

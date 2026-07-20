@@ -468,7 +468,7 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 	for _, d := range devices {
 		deviceIDs = append(deviceIDs, d.DeviceID)
 	}
-	online := h.presence.BulkOnline(ctx, deviceIDs)
+	presenceStates := h.presence.BulkState(ctx, deviceIDs)
 	remarks := map[string]string{}
 	var uds []models.UserDevice
 	h.db.WithContext(ctx).
@@ -478,8 +478,21 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 		remarks[u.DeviceID] = u.Remark
 	}
 	deviceItems := make([]map[string]interface{}, 0, len(devices))
+	onlineCount := 0
+	loggedInCount := 0
+	diagParts := make([]string, 0, len(devices))
 	for i := range devices {
 		d := &devices[i]
+		state := presenceStates[d.DeviceID]
+		loggedIn := d.LoggedIn && state.Online
+		if state.Online {
+			onlineCount++
+		}
+		if loggedIn {
+			loggedInCount++
+		}
+		diagParts = append(diagParts, fmt.Sprintf("%s{hb=%t ws=%d online=%t intent=%t logged_in=%t}",
+			d.DeviceID, state.Heartbeat, state.WSCount, state.Online, d.LoggedIn, loggedIn))
 		lastSeen := ""
 		if !d.LastSeenAt.IsZero() {
 			lastSeen = d.LastSeenAt.UTC().Format("2006-01-02T15:04:05Z")
@@ -488,8 +501,8 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 			"device_id":    d.DeviceID,
 			"device_name":  d.DeviceName,
 			"remark":       remarks[d.DeviceID],
-			"online":       online[d.DeviceID],
-			"logged_in":    d.LoggedIn && online[d.DeviceID],
+			"online":       state.Online,
+			"logged_in":    loggedIn,
 			"access_code":  d.AccessCode,
 			"os":           d.OS,
 			"os_version":   d.OSVersion,
@@ -497,6 +510,8 @@ func (h *RealtimeHandler) buildSnapshot(ctx context.Context, userID uint) (map[s
 			"last_seen_at": lastSeen,
 		})
 	}
+	log.Printf("[presence/snapshot] user=%d devices=%d online=%d logged_in=%d presence=%s",
+		userID, len(deviceItems), onlineCount, loggedInCount, strings.Join(diagParts, ";"))
 	favItems := make([]map[string]interface{}, 0, len(favorites))
 	for _, f := range favorites {
 		favItems = append(favItems, map[string]interface{}{
@@ -646,7 +661,11 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 			state := h.presence.State(c.Request.Context(), sc.deviceID)
 			log.Printf("[realtime/signal] host presence connected device=%s session=%s presence={%s}",
 				sc.deviceID, sessionID, state.String())
-			if state.Online && h.presence.RememberOnlineCandidate(c.Request.Context(), sc.deviceID) {
+			rememberedNow := false
+			if state.Online {
+				rememberedNow = h.presence.RememberOnlineCandidate(c.Request.Context(), sc.deviceID)
+			}
+			if state.Online && rememberedNow {
 				log.Printf("[presence] device online via host_ws device=%s session=%s presence={%s}",
 					sc.deviceID, sessionID, state.String())
 				if d, err := h.devices.GetByDeviceID(c.Request.Context(), sc.deviceID); err == nil && d.UserID != nil {
@@ -661,6 +680,9 @@ func (h *RealtimeHandler) HandleSignal(c *gin.Context) {
 						},
 					})
 				}
+			} else {
+				log.Printf("[presence] host_ws online_event_skipped device=%s session=%s presence={%s} remembered_now=%t",
+					sc.deviceID, sessionID, state.String(), rememberedNow)
 			}
 		} else {
 			log.Printf("[realtime/signal] host presence mark failed device=%s session=%s err=%v",
