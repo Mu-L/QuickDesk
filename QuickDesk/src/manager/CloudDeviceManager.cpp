@@ -717,10 +717,12 @@ void CloudDeviceManager::startSync()
         m_syncSocket = nullptr;
         m_syncAuthOk = false;
         m_syncBootstrapComplete = false;
+        m_syncFamilyId.clear();
     }
 
     m_syncAuthOk = false;
     m_syncBootstrapComplete = false;
+    m_syncFamilyId.clear();
     m_syncSocket = new QWebSocket(QString(),
                                     QWebSocketProtocol::VersionLatest, this);
     connect(m_syncSocket, &QWebSocket::textMessageReceived,
@@ -749,6 +751,7 @@ void CloudDeviceManager::stopSync()
         m_syncSocket = nullptr;
         m_syncAuthOk = false;
         m_syncBootstrapComplete = false;
+        m_syncFamilyId.clear();
         m_serverRev = 0;
         m_lastAppliedRev = 0;
         m_deviceRevs.clear();
@@ -805,7 +808,12 @@ void CloudDeviceManager::onSyncTextMessageReceived(const QString& message)
         m_syncAuthOk = true;
         m_syncBootstrapComplete = false;
         m_reconnectAttempt = 0;
-        LOG_INFO("[CloudDeviceManager] Realtime events auth_ok");
+        QString familyId = msg["data"].toObject()["family_id"].toString();
+        if (!familyId.isEmpty()) {
+            m_syncFamilyId = familyId;
+        }
+        LOG_INFO("[CloudDeviceManager] Realtime events auth_ok (family_id_present={})",
+                 !m_syncFamilyId.isEmpty());
         return;
     }
     if (type == "error") {
@@ -865,6 +873,7 @@ void CloudDeviceManager::onSyncDisconnected()
     bool wasAuthOk = m_syncAuthOk;
     m_syncAuthOk = false;
     m_syncBootstrapComplete = false;
+    m_syncFamilyId.clear();
     int attempt = ++m_reconnectAttempt;
     int delayMs = qMin(kSyncReconnectBaseMs * (1 << qMin(attempt - 1, 5)),
                         kSyncReconnectMaxMs);
@@ -955,6 +964,13 @@ void CloudDeviceManager::handleEventFrame(const QJsonObject& msg)
     } else if (type.startsWith("favorite.")) {
         applyFavoriteEvent(type, data);
     } else if (type == "session.revoked") {
+        QString revokedFamily = data["family_id"].toString();
+        if (!revokedFamily.isEmpty() && !m_syncFamilyId.isEmpty() &&
+            revokedFamily != m_syncFamilyId) {
+            LOG_WARN("[CloudDeviceManager] Ignoring session.revoked for different family (rev={}, has_current_family=true)",
+                     msg["server_rev"].toVariant().toLongLong());
+            return;
+        }
         LOG_WARN("[CloudDeviceManager] session.revoked received — clearing user session without changing device session intent");
         m_authManager->handleServerSessionRevoked();
     } else {

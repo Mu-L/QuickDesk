@@ -149,6 +149,7 @@ private:
     QWebSocket* m_syncSocket = nullptr;
     bool m_syncAuthOk = false;
     bool m_syncBootstrapComplete = false;
+    QString m_syncFamilyId;
     qint64 m_serverRev = 0;
     qint64 m_lastAppliedRev = 0;
     int m_reconnectAttempt = 0;

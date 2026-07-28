@@ -132,19 +132,35 @@ func (h *RealtimeHandler) HandleEvent(ctx context.Context, evt service.Event) {
 	}
 	h.eventsMu.RUnlock()
 	for _, c := range snap {
-		c.send(eventWire{
-			ID:        evt.ID,
-			Type:      evt.Type,
-			Ts:        evt.Ts,
-			ServerRev: evt.ServerRev,
-			Data:      evt.Data,
-		})
+		c.send(wireEvent(evt))
 	}
 	if evt.Type == service.EventSessionRevoked {
 		observability.Event("realtime_events", "session_revoked_fanout", map[string]interface{}{
 			"family_id": revokedFamily, "recipients": len(snap), "server_rev": evt.ServerRev, "user_id": evt.UserID,
 		})
 	}
+}
+
+func eventVisibleToFamily(evt service.Event, familyID string) bool {
+	if evt.Type != service.EventSessionRevoked {
+		return true
+	}
+	revokedFamily := revokedFamilyID(evt)
+	return revokedFamily == "" || revokedFamily == familyID
+}
+
+func filterEventsForFamily(events []service.Event, familyID string) (visible []service.Event, hiddenRevoked int) {
+	visible = make([]service.Event, 0, len(events))
+	for _, evt := range events {
+		if eventVisibleToFamily(evt, familyID) {
+			visible = append(visible, evt)
+			continue
+		}
+		if evt.Type == service.EventSessionRevoked {
+			hiddenRevoked++
+		}
+	}
+	return visible, hiddenRevoked
 }
 
 // revokedFamilyID returns the sole session family that may receive a scoped
@@ -195,6 +211,16 @@ type eventWire struct {
 	Ts        time.Time              `json:"ts,omitempty"`
 	ServerRev int64                  `json:"server_rev,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+func wireEvent(evt service.Event) eventWire {
+	return eventWire{
+		ID:        evt.ID,
+		Type:      evt.Type,
+		Ts:        evt.Ts,
+		ServerRev: evt.ServerRev,
+		Data:      evt.Data,
+	}
 }
 
 // authFrame is what every WS sends as its first message.
@@ -282,7 +308,11 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 
 	rev := h.nextRev()
 	conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-	if err := conn.WriteJSON(eventWire{Type: "auth_ok", ServerRev: rev}); err != nil {
+	if err := conn.WriteJSON(eventWire{
+		Type:      "auth_ok",
+		ServerRev: rev,
+		Data:      map[string]interface{}{"family_id": familyID},
+	}); err != nil {
 		return
 	}
 
@@ -293,15 +323,15 @@ func (h *RealtimeHandler) HandleEvents(c *gin.Context) {
 	resumed := false
 	if af.SinceRev > 0 {
 		if r, err := h.bus.EventsSinceRev(c.Request.Context(), uid, af.SinceRev); err == nil && !r.Truncated {
-			for _, e := range r.Events {
+			visible, hiddenRevoked := filterEventsForFamily(r.Events, familyID)
+			if hiddenRevoked > 0 {
+				observability.Event("realtime_events", "session_revoked_replay_filtered", map[string]interface{}{
+					"family_id": familyID, "filtered": hiddenRevoked, "since_rev": af.SinceRev, "user_id": uid,
+				})
+			}
+			for _, e := range visible {
 				conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-				if err := conn.WriteJSON(eventWire{
-					ID:        e.ID,
-					Type:      e.Type,
-					Ts:        e.Ts,
-					ServerRev: e.ServerRev,
-					Data:      e.Data,
-				}); err != nil {
+				if err := conn.WriteJSON(wireEvent(e)); err != nil {
 					return
 				}
 			}
@@ -433,14 +463,14 @@ func (ec *eventConn) reader() {
 			ec.send(eventWire{Type: "snapshot_required"})
 			continue
 		}
-		for _, e := range r.Events {
-			ec.send(eventWire{
-				ID:        e.ID,
-				Type:      e.Type,
-				Ts:        e.Ts,
-				ServerRev: e.ServerRev,
-				Data:      e.Data,
+		visible, hiddenRevoked := filterEventsForFamily(r.Events, ec.familyID)
+		if hiddenRevoked > 0 {
+			observability.Event("realtime_events", "session_revoked_replay_filtered", map[string]interface{}{
+				"family_id": ec.familyID, "filtered": hiddenRevoked, "since_rev": frame.SinceRev, "user_id": ec.userID,
 			})
+		}
+		for _, e := range visible {
+			ec.send(wireEvent(e))
 		}
 	}
 }
