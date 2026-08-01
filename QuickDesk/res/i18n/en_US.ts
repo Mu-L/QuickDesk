@@ -1263,9 +1263,32 @@
 <context>
     <name>RemoteTab</name>
     <message>
-        <location filename="../../qml/quickdeskcomponent/RemoteTab.qml" line="138"/>
+        <location filename="../../qml/quickdeskcomponent/RemoteTab.qml" line="129"/>
         <source>Connecting...</source>
         <translation>Connecting...</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/RemoteTab.qml" line="169"/>
+        <source>Video information is unavailable</source>
+        <translation>Video information is unavailable</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/RemoteTab.qml" line="171"/>
+        <source>Resolution: %1 × %2\nFrame rate: %3 fps</source>
+        <translation>Resolution: %1 × %2\nFrame rate: %3 fps</translation>
+    </message>
+</context>
+<context>
+    <name>RemoteTabBar</name>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/RemoteTabBar.qml" line="86"/>
+        <source>Auto-hide tab bar</source>
+        <translation>Auto-hide tab bar</translation>
+    </message>
+    <message>
+        <location filename="../../qml/quickdeskcomponent/RemoteTabBar.qml" line="87"/>
+        <source>Keep tab bar visible</source>
+        <translation>Keep tab bar visible</translation>
     </message>
 </context>
 <context>

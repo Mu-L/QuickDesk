@@ -10,6 +10,7 @@ class ConfigViewModel : public QObject {
     Q_PROPERTY(QString preferredVideoCodec READ preferredVideoCodec WRITE setPreferredVideoCodec NOTIFY preferredVideoCodecChanged)
     Q_PROPERTY(bool autoStart READ autoStart WRITE setAutoStart NOTIFY autoStartChanged)
     Q_PROPERTY(bool autoPrivacyScreenOnConnect READ autoPrivacyScreenOnConnect WRITE setAutoPrivacyScreenOnConnect NOTIFY autoPrivacyScreenOnConnectChanged)
+    Q_PROPERTY(bool remoteTabBarPinned READ remoteTabBarPinned WRITE setRemoteTabBarPinned NOTIFY remoteTabBarPinnedChanged)
     Q_PROPERTY(QString apiKey READ apiKey WRITE setApiKey NOTIFY apiKeyChanged)
 
 public:
@@ -34,6 +35,9 @@ public:
     bool autoPrivacyScreenOnConnect();
     void setAutoPrivacyScreenOnConnect(bool value);
 
+    bool remoteTabBarPinned();
+    void setRemoteTabBarPinned(bool value);
+
     QString apiKey();
     void setApiKey(const QString& value);
 
@@ -44,5 +48,6 @@ signals:
     void preferredVideoCodecChanged(const QString& value);
     void autoStartChanged(bool value);
     void autoPrivacyScreenOnConnectChanged(bool value);
+    void remoteTabBarPinnedChanged(bool value);
     void apiKeyChanged(const QString& value);
 };

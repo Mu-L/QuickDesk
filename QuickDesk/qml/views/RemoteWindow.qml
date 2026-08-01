@@ -25,6 +25,10 @@ Window {
     property bool showVideoStats: false  // Toggle video stats overlay
     property var closingConnections: ({})  // Guard against re-entrant closeConnection calls
     property bool emergencyStopActive: false
+    readonly property bool tabBarPinned: tabBarConfig.remoteTabBarPinned
+    property bool tabBarExpanded: false
+    readonly property bool tabBarPointerActive: tabBarHover.hovered || tabBarRevealHover.hovered
+    readonly property bool tabBarShown: tabBarPinned || tabBarExpanded
 
     // Multi-monitor: display list per device. Map: deviceId -> { displays: [], activeIndex: 0 }
     property var displayListMap: ({})
@@ -37,6 +41,10 @@ Window {
     // C++ ConnectionListModel — only affected delegates are created/destroyed
     ConnectionListModel {
         id: connectionModelObj
+    }
+
+    ConfigViewModel {
+        id: tabBarConfig
     }
     
     // Performance stats stored separately to avoid triggering model rebuild
@@ -230,6 +238,26 @@ Window {
         
         console.log("Removed connection from remote window:", tabDeviceId, "Remaining tabs:", connectionModel.count)
     }
+
+    function revealTabBar() {
+        tabBarExpanded = true
+        tabBarHideTimer.stop()
+    }
+
+    function scheduleTabBarHide() {
+        if (!tabBarPinned) {
+            tabBarHideTimer.restart()
+        }
+    }
+
+    function toggleTabBarPin() {
+        tabBarConfig.remoteTabBarPinned = !tabBarPinned
+        if (tabBarPinned) {
+            revealTabBar()
+        } else if (!tabBarHover.hovered && !tabBarRevealHotspot.hovered) {
+            scheduleTabBarHide()
+        }
+    }
     
     // Clean up all connections when window closes
     onClosing: function(close) {
@@ -277,9 +305,12 @@ Window {
         var maxWidth = Math.max(1, available.width - outerMargin * 2 - frameExtraWidth)
         var maxHeight = Math.max(1, available.height - outerMargin * 2 - frameExtraHeight)
 
-        // Account for tab bar height
-        var tabBarH = tabBar.height > 0 ? tabBar.height : 36
-        var contentMaxHeight = maxHeight - tabBarH
+        // A pinned tab bar uses the vertical layout and therefore reserves
+        // space above video; the auto-hidden bar remains an overlay.
+        var tabBarH = tabBarPinned
+            ? (tabBar.height > 0 ? tabBar.height : tabBar.implicitHeight)
+            : 0
+        var contentMaxHeight = Math.max(1, maxHeight - tabBarH)
 
         // Calculate scale factor (never upscale)
         var scale = Math.min(maxWidth / fw, contentMaxHeight / fh, 1.0)
@@ -363,111 +394,180 @@ Window {
         }
     }
     
-    ColumnLayout {
+    // In auto-hide mode the tab bar overlays video. Pinning it switches back to
+    // a vertical layout, reserving a non-interactive strip above the video.
+    StackLayout {
+        id: desktopStack
         anchors.fill: parent
-        spacing: 0
-        
-        // Tab Bar
-        RemoteTabBar {
-            id: tabBar
-            Layout.fillWidth: true
-            connectionModel: remoteWindow.connectionModel
-            currentIndex: remoteWindow.currentTabIndex
-            performanceStatsMap: remoteWindow.performanceStatsMap
-            statsVersion: remoteWindow.statsVersion
-            
-            onTabClicked: function(index) {
-                remoteWindow.currentTabIndex = index
-            }
-            
-            onTabCloseRequested: function(index) {
-                remoteWindow.closeConnection(index)
-            }
-            
-            onNewTabRequested: {
-                // TODO: Show quick connect dialog
-                console.log("New tab requested")
-            }
-        }
-        
-        // Remote Desktop View Stack
-        StackLayout {
-            id: desktopStack
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            currentIndex: remoteWindow.currentTabIndex
-            
-            Repeater {
-                model: connectionModel
-                
-                Item {
-                    id: delegateItem
-                    required property int index
-                    required property string deviceId
-                    required property string name
-                    required property string state
-                    
-                    // Detect self-connection: remote deviceId matches local deviceId
-                    readonly property bool isSelfConnection: remoteWindow.localDeviceId !== "" && delegateItem.deviceId === remoteWindow.localDeviceId
-                    
-                    // Remote desktop video view (ONLY video, no overlay UI)
-                    RemoteDesktopView {
-                        id: desktopView
-                        anchors.fill: parent
-                        deviceId: delegateItem.deviceId
-                        clientManager: remoteWindow.clientManager
-                        active: delegateItem.index === remoteWindow.currentTabIndex
-                        inputEnabled: !delegateItem.isSelfConnection  // Disable input for self-connection
-                        
-                        onFilesDropped: function(urls) {
-                            var devId = delegateItem.deviceId
-                            if (!devId || !remoteWindow.clientManager) return
-                            for (var i = 0; i < urls.length; i++) {
-                                remoteWindow.clientManager.startFileUpload(devId, urls[i])
-                                var fname = urls[i].toString().split('/').pop()
-                                transferModel.append({
-                                    transferId: "",
-                                    deviceId: devId,
-                                    filename: decodeURIComponent(fname),
-                                    progress: 0,
-                                    status: "uploading",
-                                    errorMessage: "",
-                                    direction: "upload",
-                                    savePath: ""
-                                })
-                            }
-                            fileTransferDrawer.open()
-                        }
+        anchors.topMargin: remoteWindow.tabBarPinned ? tabBar.height : 0
+        currentIndex: remoteWindow.currentTabIndex
 
-                        // Monitor video size changes (frameRate and ping updated from PerformanceTracker)
-                        onFrameWidthChanged: {
-                            if (frameWidth > 0 && frameHeight > 0) {
-                                var devId = delegateItem.deviceId
-                                var stats = remoteWindow.getPerformanceStats(devId)
-                                remoteWindow.updatePerformanceStats(devId, frameWidth, frameHeight, stats.frameRate, stats.ping)
-                            }
+        Repeater {
+            model: connectionModel
+
+            Item {
+                id: delegateItem
+                required property int index
+                required property string deviceId
+                required property string name
+                required property string state
+
+                // Detect self-connection: remote deviceId matches local deviceId
+                readonly property bool isSelfConnection: remoteWindow.localDeviceId !== "" && delegateItem.deviceId === remoteWindow.localDeviceId
+
+                // Remote desktop video view (ONLY video, no overlay UI)
+                RemoteDesktopView {
+                    id: desktopView
+                    anchors.fill: parent
+                    deviceId: delegateItem.deviceId
+                    clientManager: remoteWindow.clientManager
+                    active: delegateItem.index === remoteWindow.currentTabIndex
+                    inputEnabled: !delegateItem.isSelfConnection  // Disable input for self-connection
+                    suppressRemoteCursor: remoteWindow.tabBarPointerActive
+
+                    onFilesDropped: function(urls) {
+                        var devId = delegateItem.deviceId
+                        if (!devId || !remoteWindow.clientManager) return
+                        for (var i = 0; i < urls.length; i++) {
+                            remoteWindow.clientManager.startFileUpload(devId, urls[i])
+                            var fname = urls[i].toString().split('/').pop()
+                            transferModel.append({
+                                transferId: "",
+                                deviceId: devId,
+                                filename: decodeURIComponent(fname),
+                                progress: 0,
+                                status: "uploading",
+                                errorMessage: "",
+                                direction: "upload",
+                                savePath: ""
+                            })
                         }
-                        onFrameHeightChanged: {
-                            if (frameWidth > 0 && frameHeight > 0) {
-                                var devId = delegateItem.deviceId
-                                var stats = remoteWindow.getPerformanceStats(devId)
-                                remoteWindow.updatePerformanceStats(devId, frameWidth, frameHeight, stats.frameRate, stats.ping)
-                            }
+                        fileTransferDrawer.open()
+                    }
+
+                    // Monitor video size changes (frameRate and ping updated from PerformanceTracker)
+                    onFrameWidthChanged: {
+                        if (frameWidth > 0 && frameHeight > 0) {
+                            var devId = delegateItem.deviceId
+                            var stats = remoteWindow.getPerformanceStats(devId)
+                            remoteWindow.updatePerformanceStats(devId, frameWidth, frameHeight, stats.frameRate, stats.ping)
+                        }
+                    }
+                    onFrameHeightChanged: {
+                        if (frameWidth > 0 && frameHeight > 0) {
+                            var devId = delegateItem.deviceId
+                            var stats = remoteWindow.getPerformanceStats(devId)
+                            remoteWindow.updatePerformanceStats(devId, frameWidth, frameHeight, stats.frameRate, stats.ping)
                         }
                     }
                 }
             }
         }
     }
+
+    // A small, visible top-center hot zone reveals the otherwise hidden bar.
+    Rectangle {
+        id: tabBarRevealHotspot
+        width: 48
+        height: 10
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        radius: height / 2
+        color: "#99000000"
+        border.width: 1
+        border.color: "#80ffffff"
+        visible: !remoteWindow.tabBarPinned && !remoteWindow.tabBarExpanded
+        z: 2001
+
+        Text {
+            anchors.centerIn: parent
+            text: FluentIconGlyph.chevronDownGlyph
+            font.family: "Segoe Fluent Icons"
+            font.pixelSize: 8
+            color: "#ffffffff"
+        }
+
+        HoverHandler {
+            id: tabBarRevealHover
+            onHoveredChanged: {
+                if (hovered) {
+                    remoteWindow.revealTabBar()
+                } else {
+                    remoteWindow.scheduleTabBarHide()
+                }
+            }
+        }
+    }
+
+    // The navigation bar overlays video and only participates in pointer input
+    // while it is shown.
+    RemoteTabBar {
+        id: tabBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        y: remoteWindow.tabBarShown ? 0 : -height
+        z: 2000
+        enabled: remoteWindow.tabBarShown
+        pinned: remoteWindow.tabBarPinned
+        connectionModel: remoteWindow.connectionModel
+        currentIndex: remoteWindow.currentTabIndex
+        performanceStatsMap: remoteWindow.performanceStatsMap
+        statsVersion: remoteWindow.statsVersion
+
+        Behavior on y {
+            NumberAnimation {
+                duration: Theme.animationDurationMedium
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        HoverHandler {
+            id: tabBarHover
+            onHoveredChanged: {
+                if (hovered) {
+                    remoteWindow.revealTabBar()
+                } else {
+                    remoteWindow.scheduleTabBarHide()
+                }
+            }
+        }
+
+        onTabClicked: function(index) {
+            remoteWindow.currentTabIndex = index
+        }
+
+        onTabCloseRequested: function(index) {
+            remoteWindow.closeConnection(index)
+        }
+
+        onPinToggled: remoteWindow.toggleTabBarPin()
+
+        onNewTabRequested: {
+            // TODO: Show quick connect dialog
+            console.log("New tab requested")
+        }
+    }
+
+    Timer {
+        id: tabBarHideTimer
+        interval: 700
+        repeat: false
+        onTriggered: {
+            if (!remoteWindow.tabBarPinned
+                    && !tabBarHover.hovered
+                    && !tabBarRevealHotspot.hovered) {
+                remoteWindow.tabBarExpanded = false
+            }
+        }
+    }
         
     Item {
         anchors.fill: parent
-        anchors.topMargin: tabBar.height  // Offset by tab bar height        
         
         // Single floating button bound to current active connection
         FloatingToolButton {
             x: parent.width - width - Theme.spacingXLarge
-            y: Theme.spacingXLarge
+            y: Theme.spacingXLarge + (remoteWindow.tabBarShown ? tabBar.height : 0)
             z: 1000
             visible: connectionModel.count > 0
             

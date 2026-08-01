@@ -11,6 +11,7 @@ ConfigViewModel::ConfigViewModel(QObject* parent)
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalAccessCodeRefreshIntervalChanged, this, &ConfigViewModel::accessCodeRefreshIntervalChanged);
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalPreferredVideoCodecChanged, this, &ConfigViewModel::preferredVideoCodecChanged);
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalAutoPrivacyScreenOnConnectChanged, this, &ConfigViewModel::autoPrivacyScreenOnConnectChanged);
+    connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalRemoteTabBarPinnedChanged, this, &ConfigViewModel::remoteTabBarPinnedChanged);
     connect(&core::LocalConfigCenter::instance(), &core::LocalConfigCenter::signalApiKeyChanged, this, &ConfigViewModel::apiKeyChanged);
 }
 
@@ -80,6 +81,16 @@ bool ConfigViewModel::autoPrivacyScreenOnConnect()
 void ConfigViewModel::setAutoPrivacyScreenOnConnect(bool value)
 {
     core::LocalConfigCenter::instance().setAutoPrivacyScreenOnConnect(value);
+}
+
+bool ConfigViewModel::remoteTabBarPinned()
+{
+    return core::LocalConfigCenter::instance().remoteTabBarPinned();
+}
+
+void ConfigViewModel::setRemoteTabBarPinned(bool value)
+{
+    core::LocalConfigCenter::instance().setRemoteTabBarPinned(value);
 }
 
 QString ConfigViewModel::apiKey()

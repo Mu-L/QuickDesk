@@ -102,6 +102,7 @@ bool LocalConfigCenter::init()
 }
 
 LCC_FUNCTION_IMP_BOOL(groupWindowVerticalScreen, GroupWindowVerticalScreen);
+LCC_FUNCTION_IMP_BOOL(remoteTabBarPinned, RemoteTabBarPinned);
 
 LCC_FUNCTION_IMP_INT(accessCodeRefreshInterval, AccessCodeRefreshInterval);
 LCC_FUNCTION_IMP_INT(darkTheme, DarkTheme);

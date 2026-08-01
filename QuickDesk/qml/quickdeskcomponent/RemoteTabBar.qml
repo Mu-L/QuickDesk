@@ -13,23 +13,25 @@ Rectangle {
     property int currentIndex: 0
     property var performanceStatsMap: ({})
     property int statsVersion: 0  // Used to trigger updates
+    property bool pinned: false
     
     // Signals
     signal tabClicked(int index)
     signal tabCloseRequested(int index)
     signal newTabRequested()
+    signal pinToggled()
     
     // Style
     color: Theme.surface
     border.width: Theme.borderWidthThin
     border.color: Theme.border
     
-    implicitHeight: 60
+    implicitHeight: 32
     
     RowLayout {
         anchors.fill: parent
-        anchors.margins: Theme.spacingSmall
-        spacing: Theme.spacingSmall
+        anchors.margins: 2
+        spacing: Theme.spacingXSmall
         
         // Scrollable tab area
         ListView {
@@ -38,7 +40,7 @@ Rectangle {
             Layout.fillHeight: true
             
             orientation: ListView.Horizontal
-            spacing: Theme.spacingSmall
+            spacing: Theme.spacingXSmall
             clip: true
             
             model: control.connectionModel
@@ -75,8 +77,21 @@ Rectangle {
             
             // Scroll buttons (if needed)
             ScrollBar.horizontal: ScrollBar {
-                policy: ScrollBar.AsNeeded
+                policy: ScrollBar.AlwaysOff
             }
-        }       
+        }
+
+        QDIconButton {
+            Layout.alignment: Qt.AlignVCenter
+            iconSource: control.pinned ? FluentIconGlyph.pinnedFillGlyph : FluentIconGlyph.pinGlyph
+            iconColor: control.pinned ? Theme.primary : Theme.textSecondary
+            iconHoverColor: control.pinned ? Theme.primaryHover : Theme.primary
+            toolTipText: control.pinned
+                ? qsTr("Auto-hide tab bar")
+                : qsTr("Keep tab bar visible")
+            buttonSize: QDIconButton.Size.Small
+            buttonStyle: QDIconButton.Style.Transparent
+            onClicked: control.pinToggled()
+        }
     }
 }

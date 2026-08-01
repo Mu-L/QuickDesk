@@ -26,6 +26,9 @@ Rectangle {
     // Optional properties
     property bool active: true
     property bool inputEnabled: true  // Enable/disable input capture
+    // Set by an overlapping local control surface (for example, the tab bar).
+    // While active, show the native cursor instead of the remote cursor.
+    property bool suppressRemoteCursor: false
     property alias fillMode: videoOutput.fillMode
     
     signal filesDropped(var urls)
@@ -108,6 +111,7 @@ Rectangle {
     Image {
         id: remoteCursor
         visible: root.hasVideo && frameProvider.hasCursor && mouseArea.containsMouse
+             && !root.suppressRemoteCursor
         source: frameProvider.hasCursor ? "image://cursor/" + root.deviceId + "/" + cursorVersion : ""
         
         // Track cursor version for image refresh
@@ -133,7 +137,8 @@ Rectangle {
         enabled: root.inputEnabled && root.hasVideo
         hoverEnabled: true
         acceptedButtons: Qt.AllButtons
-        cursorShape: (root.inputEnabled && root.hasVideo && frameProvider.hasCursor) ? Qt.BlankCursor : Qt.ArrowCursor
+        cursorShape: (root.inputEnabled && root.hasVideo && frameProvider.hasCursor
+                  && !root.suppressRemoteCursor) ? Qt.BlankCursor : Qt.ArrowCursor
         
         property point lastPosition: Qt.point(0, 0)
         
