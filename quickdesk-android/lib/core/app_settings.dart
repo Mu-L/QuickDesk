@@ -5,7 +5,9 @@ library;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-const kDefaultSignalingUrl = 'wss://qd.quickcoder.cn';
+const kDefaultSignalingUrl = 'ws://qdsignaling.quickcoder.cc:8060';
+const _kLegacyDefaultSignalingUrl = 'wss://qd.quickcoder.cn';
+const kBuildTimeApiKey = String.fromEnvironment('QUICKDESK_API_KEY');
 
 class AppSettings {
   static const _kSignalingUrl = 'signaling_url';
@@ -27,9 +29,14 @@ class AppSettings {
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
+    var signalingUrl = prefs.getString(_kSignalingUrl) ?? kDefaultSignalingUrl;
+    if (signalingUrl == _kLegacyDefaultSignalingUrl) {
+      signalingUrl = kDefaultSignalingUrl;
+      await prefs.setString(_kSignalingUrl, signalingUrl);
+    }
     return AppSettings(
-      signalingUrl: prefs.getString(_kSignalingUrl) ?? kDefaultSignalingUrl,
-      apiKey: prefs.getString(_kApiKey) ?? '',
+      signalingUrl: signalingUrl,
+      apiKey: prefs.getString(_kApiKey) ?? kBuildTimeApiKey,
       lastDeviceId: prefs.getString(_kLastDeviceId) ?? '',
     );
   }

@@ -79,6 +79,7 @@ set(COMPONENT_SOURCES
     src/component/KeycodeMapper.cpp
     src/component/CursorImageProvider.cpp
     src/component/SystemTrayManager.cpp
+    src/component/ScreenGeometryProvider.cpp
 )
 
 set(COMPONENT_HEADERS
@@ -86,6 +87,7 @@ set(COMPONENT_HEADERS
     src/component/KeycodeMapper.h
     src/component/CursorImageProvider.h
     src/component/SystemTrayManager.h
+    src/component/ScreenGeometryProvider.h
 )
 
 set(CORE_SOURCES

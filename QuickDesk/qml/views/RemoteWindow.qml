@@ -254,27 +254,28 @@ Window {
             return false
         }
 
-        // Use this screen's available geometry, not desktopAvailableWidth/
-        // desktopAvailableHeight. The latter represent the whole virtual
-        // desktop and can make the window larger than a 1080p monitor in a
-        // mixed-resolution multi-monitor setup.
-        var available = scr.availableGeometry
-        if (!available || available.width <= 0 || available.height <= 0) {
-            // Keep a safe fallback for platforms that do not expose an
-            // available geometry through QML.
-            available = {
-                x: scr.virtualX,
-                y: scr.virtualY,
-                width: scr.width,
-                height: scr.height
-            }
+        // QML Screen does not expose per-screen availableGeometry. Use C++
+        // QScreen::availableGeometry() for the actual current screen bounds.
+        var nativeAvailable = ScreenGeometryProvider.availableGeometryForWindow(remoteWindow)
+        var available = {
+            x: nativeAvailable && nativeAvailable.valid ? nativeAvailable.x : scr.virtualX,
+            y: nativeAvailable && nativeAvailable.valid ? nativeAvailable.y : scr.virtualY,
+            width: nativeAvailable && nativeAvailable.valid ? nativeAvailable.width : scr.width,
+            height: nativeAvailable && nativeAvailable.valid ? nativeAvailable.height : scr.height
         }
+        var frameMargins = ScreenGeometryProvider.frameMarginsForWindow(remoteWindow)
+        var frameLeft = frameMargins && frameMargins.valid ? Math.max(0, frameMargins.left) : 0
+        var frameTop = frameMargins && frameMargins.valid ? Math.max(0, frameMargins.top) : 0
+        var frameRight = frameMargins && frameMargins.valid ? Math.max(0, frameMargins.right) : 0
+        var frameBottom = frameMargins && frameMargins.valid ? Math.max(0, frameMargins.bottom) : 0
+        var frameExtraWidth = frameLeft + frameRight
+        var frameExtraHeight = frameTop + frameBottom
 
         // Leave an additional outer margin so native window decorations,
         // including the title bar, remain reachable.
         var outerMargin = 16
-        var maxWidth = Math.max(1, available.width - outerMargin * 2)
-        var maxHeight = Math.max(1, available.height - outerMargin * 2)
+        var maxWidth = Math.max(1, available.width - outerMargin * 2 - frameExtraWidth)
+        var maxHeight = Math.max(1, available.height - outerMargin * 2 - frameExtraHeight)
 
         // Account for tab bar height
         var tabBarH = tabBar.height > 0 ? tabBar.height : 36
@@ -286,11 +287,18 @@ Window {
         var newWidth  = Math.round(fw * scale)
         var newHeight = Math.round(fh * scale) + tabBarH
 
-        // Center on screen
+        // Center the native window frame on screen, then convert to client position.
+        var frameWidth = newWidth + frameExtraWidth
+        var frameHeight = newHeight + frameExtraHeight
+        var frameX = available.x + Math.round((available.width - frameWidth) / 2)
+        var frameY = available.y + Math.round((available.height - frameHeight) / 2)
+        var newX = frameX + frameLeft
+        var newY = frameY + frameTop
+
         remoteWindow.width  = newWidth
         remoteWindow.height = newHeight
-        remoteWindow.x = available.x + Math.round((available.width - newWidth) / 2)
-        remoteWindow.y = available.y + Math.round((available.height - newHeight) / 2)
+        remoteWindow.x = newX
+        remoteWindow.y = newY
 
         console.log("Resized window to", newWidth + "x" + newHeight,
                      "for remote desktop", fw + "x" + fh,
@@ -303,10 +311,6 @@ Window {
     // Auto-resize window to best fit the remote desktop resolution (called once on first frame)
     // Triggered from onStatsVersionChanged (at window level, not inside Repeater delegate)
     function autoResizeToFit(fw, fh) {
-        console.log("autoResizeToFit called:", fw + "x" + fh,
-                     "hasAutoResized:", hasAutoResized,
-                     "screen:", remoteWindow.screen ? "valid" : "null")
-
         if (fw <= 0 || fh <= 0) return
         if (hasAutoResized) return
 
@@ -565,7 +569,6 @@ Window {
 
                 var s = remoteWindow.getPerformanceStats(devId)
                 if (s && s.frameWidth > 0 && s.frameHeight > 0) {
-                    console.log("Manual fit window to remote desktop:", s.frameWidth + "x" + s.frameHeight)
                     remoteWindow.resizeToFit(s.frameWidth, s.frameHeight)
                 }
             }

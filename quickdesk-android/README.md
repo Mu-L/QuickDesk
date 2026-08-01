@@ -51,6 +51,12 @@ flutter test               # 协议层单元测试（SPAKE2 / protobuf / Jingle�
 flutter build apk --debug  # 构建 APK（产物在 build/app/outputs/flutter-apk/）
 ```
 
+官方信令服务器 API Key 可在构建时注入，未注入时默认为空：
+
+```bash
+flutter build apk --release --dart-define=QUICKDESK_API_KEY=your-secret-key
+```
+
 > 注意：本工程不要放在网络映射盘（SMB/UNC 路径）上构建，Gradle/ninja/Kotlin
 > 增量编译均无法在网络盘上正常工作。请将仓库克隆/复制到本地磁盘再构建。
 

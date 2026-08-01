@@ -25,6 +25,7 @@
 #include "component/KeycodeMapper.h"
 #include "component/CursorImageProvider.h"
 #include "component/SystemTrayManager.h"
+#include "component/ScreenGeometryProvider.h"
 #include "viewmodel/configviewmodel.h"
 #include "viewmodel/connectionlistmodel.h"
 #include "language/languagemanage.h"
@@ -111,6 +112,14 @@ int main(int argc, char *argv[])
             auto* mgr = &quickdesk::SystemTrayManager::instance();
             QJSEngine::setObjectOwnership(mgr, QJSEngine::CppOwnership);
             return mgr;
+        });
+
+    // Register ScreenGeometryProvider as singleton
+    qmlRegisterSingletonType<quickdesk::ScreenGeometryProvider>("QuickDesk", 1, 0, "ScreenGeometryProvider",
+        [](QQmlEngine*, QJSEngine*) -> QObject* {
+            auto* provider = &quickdesk::ScreenGeometryProvider::instance();
+            QJSEngine::setObjectOwnership(provider, QJSEngine::CppOwnership);
+            return provider;
         });
 
     QQmlApplicationEngine engine;

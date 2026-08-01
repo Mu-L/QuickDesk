@@ -53,8 +53,11 @@ jobs:
       # 注意：release 构建当前按 app/build.gradle.kts 配置使用 debug 签名，
       # 接入正式签名后在此注入 keystore（secrets）并移除该说明。
       - name: Build APK (arm64 + arm32)
+        env:
+          ENV_QUICKDESK_API_KEY: ${{ secrets.QUICKDESK_API_KEY }}
         run: >-
           flutter build apk --release --split-per-abi
+          --dart-define=QUICKDESK_API_KEY=${ENV_QUICKDESK_API_KEY}
           --target-platform android-arm,android-arm64
 
       - name: Get version
