@@ -1017,9 +1017,29 @@
         <translation>URL copied</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/McpConfigPopup.qml" line="350"/>
-        <source>Copy endpoint URL</source>
-        <translation>Copy endpoint URL</translation>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="317"/>
+        <source>Local</source>
+        <translation>Local</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="319"/>
+        <source>Use on this computer</source>
+        <translation>Use on this computer</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="322"/>
+        <source>LAN</source>
+        <translation>LAN</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="324"/>
+        <source>Use from another device on the same network</source>
+        <translation>Use from another device on the same network</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="386"/>
+        <source>For remote access, use the LAN URL and allow the port through your firewall.</source>
+        <translation>For remote access, use the LAN URL and allow the port through your firewall.</translation>
     </message>
 </context>
 <context>

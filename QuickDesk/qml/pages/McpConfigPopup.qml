@@ -309,46 +309,85 @@ Popup {
                 }
             }
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacingSmall
                 visible: mainController && mainController.mcpServiceRunning
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 32
-                    radius: Theme.radiusSmall
-                    color: Theme.surfaceVariant
-                    border.width: Theme.borderWidthThin
-                    border.color: Theme.border
-                    clip: true
+                Repeater {
+                    model: [
+                        {
+                            label: qsTr("Local"),
+                            url: mainController ? mainController.mcpHttpUrl : "",
+                            hint: qsTr("Use on this computer")
+                        },
+                        {
+                            label: qsTr("LAN"),
+                            url: mainController ? mainController.mcpHttpLanUrl : "",
+                            hint: qsTr("Use from another device on the same network")
+                        }
+                    ]
 
-                    Text {
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spacingSmall
-                        anchors.rightMargin: Theme.spacingSmall
-                        text: mainController ? mainController.mcpHttpUrl : ""
-                        font.pixelSize: Theme.fontSizeSmall
-                        font.family: "Consolas"
-                        color: Theme.primary
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
+                    delegate: RowLayout {
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        spacing: Theme.spacingSmall
+                        visible: modelData.url.length > 0
+
+                        Text {
+                            text: modelData.label
+                            font.pixelSize: Theme.fontSizeSmall - 1
+                            color: Theme.textSecondary
+                            Layout.preferredWidth: 44
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 32
+                            radius: Theme.radiusSmall
+                            color: Theme.surfaceVariant
+                            border.width: Theme.borderWidthThin
+                            border.color: Theme.border
+                            clip: true
+
+                            Text {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacingSmall
+                                anchors.rightMargin: Theme.spacingSmall
+                                text: modelData.url
+                                font.pixelSize: Theme.fontSizeSmall
+                                font.family: "Consolas"
+                                color: Theme.primary
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        QDIconButton {
+                            iconSource: FluentIconGlyph.copyGlyph
+                            buttonSize: QDIconButton.Size.Small
+                            onClicked: {
+                                if (mainController && modelData.url) {
+                                    mainController.copyToClipboard(modelData.url)
+                                    popup._showToast(qsTr("URL copied"), 0)
+                                }
+                            }
+                            QDToolTip {
+                                visible: parent.hovered
+                                text: modelData.hint
+                            }
+                        }
                     }
                 }
 
-                QDIconButton {
-                    iconSource: FluentIconGlyph.copyGlyph
-                    buttonSize: QDIconButton.Size.Small
-                    onClicked: {
-                        if (mainController && mainController.mcpHttpUrl) {
-                            mainController.copyToClipboard(mainController.mcpHttpUrl)
-                            popup._showToast(qsTr("URL copied"), 0)
-                        }
-                    }
-                    QDToolTip {
-                        visible: parent.hovered
-                        text: qsTr("Copy endpoint URL")
-                    }
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("For remote access, use the LAN URL and allow the port through your firewall.")
+                    font.pixelSize: Theme.fontSizeSmall - 1
+                    color: Theme.textSecondary
+                    wrapMode: Text.WordWrap
+                    visible: mainController && mainController.mcpHttpLanUrl.length > 0
                 }
             }
         }

@@ -38,13 +38,13 @@ QuickDesk GUI (Qt 6)
 远程桌面 (Chromium Remoting / WebRTC)
 ```
 
-QuickDesk 启动并管理 `quickdesk-mcp` HTTP 服务器进程。AI 客户端通过 `http://127.0.0.1:18080/mcp` 连接。此模式支持多个 AI 客户端同时连接，也支持网络远程访问。
+QuickDesk 启动并管理 `quickdesk-mcp` HTTP 服务器进程，并绑定到 `0.0.0.0`。本机 AI 客户端通过 `http://127.0.0.1:18080/mcp` 连接；远程客户端应将 `127.0.0.1` 替换为 QuickDesk 所在机器可访问的 IP 地址。此模式支持多个 AI 客户端同时连接，也支持网络远程访问。
 
 ## 快速开始
 
 ### 1. 启动 QuickDesk
 
-正常启动 QuickDesk，WebSocket API 服务器会自动在 `ws://127.0.0.1:9600` 上运行。
+正常启动 QuickDesk，WebSocket API 服务器会监听所有 IPv4 网卡，本机可通过 `ws://127.0.0.1:9600` 访问。
 
 ### 2. 配置 AI 客户端
 
@@ -876,7 +876,7 @@ cargo build --release
 ### HTTP/SSE 模式："无法连接 MCP 服务器"
 
 1. 确认 QuickDesk 已切换到 HTTP/SSE 模式并打开了 MCP HTTP 服务开关
-2. 检查 URL 是否与 QuickDesk MCP 设置中显示的端点一致（默认：`http://127.0.0.1:18080/mcp`）
+2. 检查 URL 是否与 QuickDesk MCP 设置中显示的端点一致（默认本机 URL：`http://127.0.0.1:18080/mcp`）
 3. 确认防火墙未拦截 HTTP 端口
 4. 如需远程访问，`--host` 应设为 `0.0.0.0`（而不是 `127.0.0.1`）
 

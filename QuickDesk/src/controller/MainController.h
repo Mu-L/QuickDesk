@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QPointer>
+#include <QStringList>
 #include <QTimer>
 #include <memory>
 
@@ -68,6 +69,7 @@ class MainController : public QObject {
     Q_PROPERTY(QString mcpTransportMode READ mcpTransportMode WRITE setMcpTransportMode NOTIFY mcpTransportModeChanged)
     Q_PROPERTY(int mcpHttpPort READ mcpHttpPort WRITE setMcpHttpPort NOTIFY mcpHttpPortChanged)
     Q_PROPERTY(QString mcpHttpUrl READ mcpHttpUrl NOTIFY mcpServiceRunningChanged)
+    Q_PROPERTY(QString mcpHttpLanUrl READ mcpHttpLanUrl NOTIFY mcpServiceRunningChanged)
 
     // Skill Host
     Q_PROPERTY(bool skillHostEnabled READ skillHostEnabled WRITE setSkillHostEnabled NOTIFY skillHostEnabledChanged)
@@ -168,6 +170,7 @@ public:
     int mcpHttpPort() const;
     void setMcpHttpPort(int port);
     QString mcpHttpUrl() const;
+    QString mcpHttpLanUrl() const;
 
     // Access code auto-refresh info
     QString nextAccessCodeRefreshTime() const;

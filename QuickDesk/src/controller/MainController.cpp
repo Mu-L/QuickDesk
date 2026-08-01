@@ -10,12 +10,14 @@
 #include "infra/env/applicationcontext.h"
 #include "infra/log/log.h"
 #include "core/localconfigcenter.h"
+#include <QAbstractSocket>
 #include <QTimer>
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QNetworkInterface>
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
@@ -23,6 +25,33 @@
 #include <QMutexLocker>
 #include <QPointer>
 #include <QThreadPool>
+
+namespace {
+constexpr const char* kMcpHttpBindHost = "0.0.0.0";
+constexpr const char* kMcpHttpDisplayHost = "127.0.0.1";
+
+QString firstReachableIpv4Address() {
+    const auto interfaces = QNetworkInterface::allInterfaces();
+    for (const auto& networkInterface : interfaces) {
+        const auto flags = networkInterface.flags();
+        if (!flags.testFlag(QNetworkInterface::IsUp) ||
+            !flags.testFlag(QNetworkInterface::IsRunning) ||
+            flags.testFlag(QNetworkInterface::IsLoopBack)) {
+            continue;
+        }
+
+        const auto entries = networkInterface.addressEntries();
+        for (const auto& entry : entries) {
+            const auto address = entry.ip();
+            if (address.protocol() == QAbstractSocket::IPv4Protocol &&
+                !address.isLoopback()) {
+                return address.toString();
+            }
+        }
+    }
+    return QString();
+}
+}
 
 namespace quickdesk {
 
@@ -1201,9 +1230,24 @@ void MainController::setMcpHttpPort(int port) {
 
 QString MainController::mcpHttpUrl() const {
     if (m_mcpTransportMode == "http" && mcpServiceRunning()) {
-        return QStringLiteral("http://127.0.0.1:%1/mcp").arg(m_mcpHttpPort);
+        return QStringLiteral("http://%1:%2/mcp")
+            .arg(QString::fromLatin1(kMcpHttpDisplayHost))
+            .arg(m_mcpHttpPort);
     }
     return QString();
+}
+
+QString MainController::mcpHttpLanUrl() const {
+    if (m_mcpTransportMode != "http" || !mcpServiceRunning()) {
+        return QString();
+    }
+
+    const auto address = firstReachableIpv4Address();
+    if (address.isEmpty()) {
+        return QString();
+    }
+
+    return QStringLiteral("http://%1:%2/mcp").arg(address).arg(m_mcpHttpPort);
 }
 
 void MainController::startMcpService() {
@@ -1262,6 +1306,7 @@ void MainController::startMcpHttpProcess() {
     auto wsPort = m_wsApiServer ? m_wsApiServer->port() : 9600;
     QStringList args;
     args << "--transport" << "http"
+         << "--host" << QString::fromLatin1(kMcpHttpBindHost)
          << "--port" << QString::number(m_mcpHttpPort)
          << "--ws-url" << QStringLiteral("ws://127.0.0.1:%1").arg(wsPort);
 
@@ -1359,7 +1404,9 @@ QJsonObject MainController::buildMcpServerConfig(const QString& transport) const
     if (transport == "http") {
         // HTTP/SSE mode: URL-based config
         serverConfig["url"] =
-            QStringLiteral("http://127.0.0.1:%1/mcp").arg(m_mcpHttpPort);
+            QStringLiteral("http://%1:%2/mcp")
+                .arg(QString::fromLatin1(kMcpHttpDisplayHost))
+                .arg(m_mcpHttpPort);
     } else {
         // stdio mode: command-based config
         auto mcpPath = getMcpBinaryPath();

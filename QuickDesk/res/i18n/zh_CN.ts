@@ -1017,9 +1017,29 @@
         <translation>URL 已复制</translation>
     </message>
     <message>
-        <location filename="../../qml/pages/McpConfigPopup.qml" line="350"/>
-        <source>Copy endpoint URL</source>
-        <translation>复制端点 URL</translation>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="317"/>
+        <source>Local</source>
+        <translation>本机</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="319"/>
+        <source>Use on this computer</source>
+        <translation>在本机使用</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="322"/>
+        <source>LAN</source>
+        <translation>局域网</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="324"/>
+        <source>Use from another device on the same network</source>
+        <translation>从同一网络的其他设备使用</translation>
+    </message>
+    <message>
+        <location filename="../../qml/pages/McpConfigPopup.qml" line="386"/>
+        <source>For remote access, use the LAN URL and allow the port through your firewall.</source>
+        <translation>远程访问请使用局域网 URL，并确保防火墙允许该端口。</translation>
     </message>
 </context>
 <context>

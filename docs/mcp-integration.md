@@ -38,13 +38,13 @@ QuickDesk GUI (Qt 6)
 Remote Desktop (Chromium Remoting / WebRTC)
 ```
 
-QuickDesk launches `quickdesk-mcp` as a managed HTTP server. AI clients connect via `http://127.0.0.1:18080/mcp`. This mode supports multiple simultaneous AI clients and network-accessible endpoints.
+QuickDesk launches `quickdesk-mcp` as a managed HTTP server bound to `0.0.0.0`. Local AI clients connect via `http://127.0.0.1:18080/mcp`; remote clients should replace `127.0.0.1` with the QuickDesk machine's reachable IP address. This mode supports multiple simultaneous AI clients and network-accessible endpoints.
 
 ## Quick Start
 
 ### 1. Start QuickDesk
 
-Launch QuickDesk normally. The WebSocket API server starts automatically on `ws://127.0.0.1:9600`.
+Launch QuickDesk normally. The WebSocket API server listens on all IPv4 interfaces and is locally reachable at `ws://127.0.0.1:9600`.
 
 ### 2. Configure Your AI Client
 
@@ -878,7 +878,7 @@ Make sure QuickDesk is running. The WebSocket API server must be active at `ws:/
 ### HTTP/SSE mode: "Cannot connect to MCP server"
 
 1. Check that QuickDesk has the MCP HTTP Service toggled **ON** (in HTTP/SSE mode)
-2. Verify the URL matches the endpoint shown in QuickDesk MCP settings (default: `http://127.0.0.1:18080/mcp`)
+2. Verify the URL matches the endpoint shown in QuickDesk MCP settings (default local URL: `http://127.0.0.1:18080/mcp`)
 3. Ensure no firewall is blocking the HTTP port
 4. For remote access, the `--host` must be `0.0.0.0` (not `127.0.0.1`)
 
