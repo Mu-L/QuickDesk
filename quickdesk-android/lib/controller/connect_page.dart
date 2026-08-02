@@ -195,6 +195,7 @@ class _ConnectPageState extends State<ConnectPage> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _apiKeyCtrl,
+                  obscureText: true,
                   decoration: InputDecoration(labelText: L10n.t('connect.apiKey')),
                 ),
               ],
