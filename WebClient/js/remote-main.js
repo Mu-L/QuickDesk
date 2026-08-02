@@ -501,17 +501,21 @@ class RemoteDesktopApp {
     _onVideoLayout(layout) {
         if (!layout.videoTracks || layout.videoTracks.length === 0) return;
 
-        this._log(t('log.videoLayout', { count: layout.videoTracks.length }));
+        // The host prepends legacy capture/full-desktop tracks without a media
+        // stream id. Only per-display tracks can be selected or rendered.
+        const displays = layout.videoTracks.filter(track => track.mediaStreamId);
+        this._log(t('log.videoLayout', { count: displays.length }));
 
-        this._currentDisplayList = layout.videoTracks;
+        this._currentDisplayList = displays;
+        if (displays.length === 0) return;
 
         let selectedTrack = null;
         let selectedIndex = 0;
 
         if (this._selectedStreamId) {
-            for (let i = 0; i < layout.videoTracks.length; i++) {
-                if (layout.videoTracks[i].mediaStreamId === this._selectedStreamId) {
-                    selectedTrack = layout.videoTracks[i];
+            for (let i = 0; i < displays.length; i++) {
+                if (displays[i].mediaStreamId === this._selectedStreamId) {
+                    selectedTrack = displays[i];
                     selectedIndex = i;
                     break;
                 }
@@ -520,16 +524,16 @@ class RemoteDesktopApp {
 
         if (!selectedTrack) {
             if (layout.primaryScreenId !== undefined) {
-                for (let i = 0; i < layout.videoTracks.length; i++) {
-                    if (layout.videoTracks[i].screenId === layout.primaryScreenId) {
-                        selectedTrack = layout.videoTracks[i];
+                for (let i = 0; i < displays.length; i++) {
+                    if (displays[i].screenId === layout.primaryScreenId) {
+                        selectedTrack = displays[i];
                         selectedIndex = i;
                         break;
                     }
                 }
             }
             if (!selectedTrack) {
-                selectedTrack = layout.videoTracks[0];
+                selectedTrack = displays[0];
                 selectedIndex = 0;
             }
         }
@@ -563,7 +567,7 @@ class RemoteDesktopApp {
         }
 
         if (this.floatingToolbar) {
-            this.floatingToolbar.updateDisplayList(layout.videoTracks, selectedIndex);
+            this.floatingToolbar.updateDisplayList(displays, selectedIndex);
         }
     }
 

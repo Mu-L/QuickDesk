@@ -297,7 +297,12 @@ class _RemotePageState extends State<RemotePage> {
 
   void _onVideoLayout(VideoLayoutMsg layout) {
     if (layout.videoTracks.isEmpty) return;
-    _displays = layout.videoTracks;
+    // The host prepends legacy capture/full-desktop tracks without a media
+    // stream id. Only per-display tracks can be selected or rendered.
+    _displays = layout.videoTracks
+        .where((track) => (track.mediaStreamId ?? '').isNotEmpty)
+        .toList();
+    if (_displays.isEmpty) return;
 
     VideoTrackLayout? selected;
     var index = 0;
